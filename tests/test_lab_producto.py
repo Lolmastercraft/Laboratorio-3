@@ -21,7 +21,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from finnorte import llm, trazas  # noqa: E402
 from finnorte.caso_guia.herramientas import TICKETS  # noqa: E402
 
-CRED = {"email": "ana@example.com", "contrasena": "segura123"}
+CRED = {"email": "ana@finnorte.mx", "contrasena": "segura123"}
 TAREA_MARTES = "Quiero desplegar un cambio de riesgo alto en pagos-api el 2026-11-24. Si se puede, crea el ticket."
 TAREA_VIERNES = "Quiero desplegar un cambio de riesgo alto en pagos-api el 2026-11-27. Si se puede, crea el ticket."
 
@@ -71,7 +71,7 @@ def test_entrada_invalida_422(cliente):
 def test_mismo_mensaje_usuario_inexistente_y_contrasena_mala(cliente):
     _ok(cliente.post("/auth/registro", json=CRED))
     a = _ok(cliente.post("/auth/login", json={**CRED, "contrasena": "mala12345"})).json()
-    b = _ok(cliente.post("/auth/login", json={"email": "nadie@example.com", "contrasena": "segura123"})).json()
+    b = _ok(cliente.post("/auth/login", json={"email": "nadie@finnorte.mx", "contrasena": "segura123"})).json()
     assert a["status"] == b["status"] == 401 and a["detail"] == b["detail"]
 
 
@@ -133,5 +133,5 @@ def test_viernes_no_deja_nada_que_autorizar(cliente):
 def test_otro_usuario_no_puede_confirmar(cliente):
     h = _token(cliente)
     p = _ok(cliente.post("/v1/agente", json={"tarea": TAREA_MARTES}, headers=h)).json()["pendientes"][0]
-    h2 = _token(cliente, {"email": "beto@example.com", "contrasena": "segura456"})
+    h2 = _token(cliente, {"email": "beto@finnorte.mx", "contrasena": "segura456"})
     assert cliente.post(f"/v1/agente/confirmar/{p['id']}", json={"aprobar": True}, headers=h2).status_code == 404

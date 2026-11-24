@@ -1,6 +1,6 @@
 # Laboratorio 3 · Producto FinNorte
 
-Entrega individual de Luis Alfonso Juárez Amaro (`Lolmastercraft`) para LSCA2318. Se implementa la autenticación del servicio y se verifica el caso guía del kit v2 con FastAPI, SQLite y Streamlit.
+Entrega Luis Alfonso. Se implementa la autenticación del servicio y se verifica el caso guía del kit v2 con FastAPI, SQLite y Streamlit.
 
 ## Ejecución local
 

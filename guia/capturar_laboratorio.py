@@ -1,6 +1,7 @@
 """Toma las capturas de Streamlit de la entrega usando una cuenta ficticia."""
 from __future__ import annotations
 
+import json
 import os
 import re
 import secrets
@@ -37,6 +38,44 @@ def detener(proceso: subprocess.Popen) -> None:
     proceso.wait(timeout=10)
 
 
+def verificar_http(destino: Path) -> None:
+    """Guarda las respuestas HTTP y las cabeceras relevantes con los secretos omitidos."""
+    with requests.Session() as http:
+        def post(ruta, datos, bearer=None):
+            cabeceras = {"Authorization": f"Bearer {bearer}"} if bearer else {}
+            return http.post(f"{API_URL}{ruta}", json=datos, headers=cabeceras, timeout=10)
+
+        def evidencia(respuesta, codigo):
+            if respuesta.status_code != codigo:
+                raise AssertionError(f"Se esperaba HTTP {codigo}; se recibió {respuesta.status_code}")
+            return {"http": codigo, "content_type": respuesta.headers.get("Content-Type"), "json": respuesta.json()}
+
+        pregunta = {"pregunta": "¿Cada cuánto se rotan los secretos?"}
+        registro = {"email": "captura-http@example.com", "contrasena": secrets.token_urlsafe(14)}
+        credenciales_malas = {**registro, "contrasena": "ficticia-incorrecta"}
+        resultados = {"sin_token": evidencia(post("/v1/preguntas", pregunta), 401)}
+        resultados["registro"] = evidencia(post("/auth/registro", registro), 201)
+        token = post("/auth/login", registro).json()["token"]
+        resultados["pregunta"] = evidencia(post("/v1/preguntas", pregunta, token), 200)
+        cambiada = "a" if token[-1] != "a" else "b"
+        resultados["alterado"] = evidencia(post("/v1/preguntas", pregunta, token[:-1] + cambiada), 401)
+        resultados["entrada_corta"] = evidencia(post("/v1/preguntas", {"pregunta": "x"}, token), 422)
+        resultados["inexistente"] = evidencia(post("/auth/login", {**credenciales_malas,
+                                               "email": "inexistente@example.com"}), 401)
+        for _ in range(5):
+            resultados["incorrecta"] = evidencia(post("/auth/login", credenciales_malas), 401)
+        assert resultados["inexistente"]["json"]["detail"] == resultados["incorrecta"]["json"]["detail"]
+        resultados["bloqueo"] = evidencia(post("/auth/login", registro), 429)
+        plan = evidencia(post("/v1/agente", {"tarea": TAREA}, token), 200)["json"]
+        pendiente = plan["pendientes"][0]
+        resultados["pendiente"] = pendiente
+        resultados["confirmada"] = evidencia(
+            post(f"/v1/agente/confirmar/{pendiente['id']}", {"aprobar": True}, token), 200,
+        )
+        assert resultados["confirmada"]["json"]["estado"] == "ejecutada"
+        (destino / "04-http.json").write_text(json.dumps(resultados, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def main(destino: Path) -> None:
     destino.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as temporal, ExitStack() as sesiones:
@@ -45,6 +84,7 @@ def main(destino: Path) -> None:
         api = subprocess.Popen([sys.executable, "-m", "uvicorn", "api.producto:app"], env=env)
         sesiones.callback(detener, api)
         esperar(f"{API_URL}/salud")
+        verificar_http(destino)
         interfaz = subprocess.Popen(
             [sys.executable, "-m", "streamlit", "run", "app/cliente_api.py", "--server.headless=true",
              "--server.address=127.0.0.1", "--browser.gatherUsageStats=false"], env=env,
@@ -77,9 +117,13 @@ def main(destino: Path) -> None:
             pagina.screenshot(path=destino / "02-rechazo.png")
 
             pagina.get_by_text("Preguntar (caso guía)", exact=True).click()
-            pagina.get_by_label("Tu pregunta", exact=True).fill("¿Cada cuánto se rotan los secretos?")
+            pregunta = pagina.get_by_label("Tu pregunta", exact=True)
+            pregunta.fill("¿Cada cuánto se rotan los secretos?")
+            pregunta.press("Tab")
+            preguntar = pagina.get_by_role("button", name="Preguntar", exact=True)
+            expect(preguntar).to_be_enabled()
             detener(api)
-            pagina.get_by_role("button", name="Preguntar", exact=True).click()
+            preguntar.click()
             expect(pagina.get_by_text("Servicio no disponible", exact=False).first).to_be_visible()
             pagina.screenshot(path=destino / "03-servicio-apagado.png")
             browser.close()

@@ -25,19 +25,22 @@ jobs:
           python -m pip install -r requirements.txt
           python -m pip install -e .
       - name: Ejecutar checkpoints del kit oficial
+        shell: bash
         run: |
-          python -m pytest tests/test_lab_producto.py -q -k 'salud or sin_token or invalida'
-          python -m pytest tests/test_lab_producto.py -q -k 'mensaje or alterado or bloqueo or texto_plano'
-          python -m pytest tests/test_lab_producto.py -q
+          mkdir -p capturas
+          python -m pytest tests/test_lab_producto.py -q -k 'salud or sin_token or invalida' | tee capturas/checkpoint-1.txt
+          python -m pytest tests/test_lab_producto.py -q -k 'mensaje or alterado or bloqueo or texto_plano' | tee capturas/checkpoint-2.txt
+          python -m pytest tests/test_lab_producto.py -q | tee capturas/checkpoint-3.txt
       - name: Capturar Streamlit
         run: |
           python -m pip install playwright
           python -m playwright install --with-deps chromium
           python guia/capturar_laboratorio.py capturas
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: capturas-laboratorio-3
-          path: capturas/*.png
+          path: capturas/
           if-no-files-found: error
 
   etiquetar:

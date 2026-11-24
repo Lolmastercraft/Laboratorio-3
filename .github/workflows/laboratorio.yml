@@ -1,0 +1,61 @@
+name: Verificación del Laboratorio 3
+
+on:
+  push:
+    branches: [laboratorio-3-lolmastercraft]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      LLM_PROVIDER: fake
+      EMB_PROVIDER: hash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Instalar dependencias de la entrega
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip install -e .
+      - name: Ejecutar checkpoints del kit oficial
+        shell: bash
+        run: |
+          mkdir -p capturas
+          python -m pytest tests/test_lab_producto.py -q -k 'salud or sin_token or invalida' | tee capturas/checkpoint-1.txt
+          python -m pytest tests/test_lab_producto.py -q -k 'mensaje or alterado or bloqueo or texto_plano' | tee capturas/checkpoint-2.txt
+          python -m pytest tests/test_lab_producto.py -q | tee capturas/checkpoint-3.txt
+      - name: Capturar Streamlit
+        run: |
+          python -m pip install playwright
+          python -m playwright install --with-deps chromium
+          python guia/capturar_laboratorio.py capturas
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: capturas-laboratorio-3
+          path: capturas/
+          if-no-files-found: error
+
+  etiquetar:
+    if: github.ref == 'refs/heads/laboratorio-3-lolmastercraft'
+    needs: verificar
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publicar etiqueta de la entrega verificada
+        run: |
+          if git ls-remote --tags --exit-code origin refs/tags/lab-lolmastercraft; then
+            echo 'La etiqueta de entrega ya existe y se conserva.'
+          else
+            git tag lab-lolmastercraft "$GITHUB_SHA"
+            git push origin refs/tags/lab-lolmastercraft
+          fi
